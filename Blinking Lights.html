@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <style>
+            input [type="checkbox"]{
+                width: 1rem; height: 1rem;
+                border-radius: 50%;
+                transition: box-shadow .3s;
+                background: lightgrey;
+                cursor: pointer;
+                border: 0;
+                appearance: none; -webkit-appearance: none; 
+            } 
+
+            fieldset {
+                border-style: none;
+                /* vertical-align:middle; */
+                text-align: center;
+            }
+
+            form {
+                z-index: 1;
+            }
+            canvas {
+                width: calc(100% - 1rem);
+                height: calc(100% - 4.5rem);
+                position: absolute;
+                margin-top: 3.5rem;
+                background-color: darkslategrey !important;
+            }
+            #canvas {z-index: 2;}
+
+            /* track */
+            input[type="range"] {
+                -webkit-appearance: none !important;
+                width: 100px;
+                height: 3px;
+                background-color: #ff5252;
+                border: none;
+                border-radius: 10px;
+                margin-left: 1rem;
+                vertical-align: middle;
+                /* margin: auto; */
+                transition: all 400ms;
+                outline:none;
+                padding: 0;
+                margin: 0;
+            }
+            input[type="range"]::-moz-range-track { 
+                width: 100px;
+                height: 3px;
+                background-color: #ff5252;
+                border: none;
+                border-radius: 10px;
+                margin-left: 1rem;
+                vertical-align: middle;
+                /* margin: auto; */
+                transition: all 400ms;
+                outline:none;
+                padding: 0;
+                margin: 0;
+            }
+
+            /* thumb */
+            input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none !important;
+                transform:scale(0.75);
+                width: 20px;
+                height: 20px;
+                border: none;
+                background-color: #ff5252;
+                border-radius: 40px; 
+                box-shadow: 0px 0px 0px green;
+                transition: all 400ms;
+                outline:none
+            }
+            input[type="range"]::-moz-range-thumb {
+                -webkit-appearance: none !important;
+                transform:scale(0.75);
+                width: 20px;
+                height: 20px;
+                border: none;
+                background-color: #ff5252;
+                border-radius: 30px;
+                box-shadow: 0px 0px 0px green;
+                transition: all 400ms;
+                outline:none
+            }
+
+            /* thumb hover */
+            input[type="range"]::-webkit-slider-thumb:hover {  
+                transform:scale(0.85);
+            }
+            input[type="range"]::-moz-range-thumb:hover{
+                transform:scale(0.85);
+            }
+
+            /* thumb active */
+            input[type="range"]::-webkit-slider-thumb:active {
+                transform:scale(1);
+            }
+            input[type="range"]::-moz-range-thumb:active{
+                transform:scale(1);
+            }
+
+            .rangevalue {
+                text-align: center;
+                font-family: "Quantico", sans-serif;
+                font-size: 18px;
+                vertical-align: middle;
+                /* display: block; */
+                /* margin: auto; */
+                /* padding: 10px 0px; */
+                width: 100%;
+                /* color: #ff5252; */
+            }
+        </style>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    </head>
+    <body onload="init2();">
+        <canvas id="canvas">
+        This text is displayed if your browser does not support HTML5 Canvas.
+        </canvas>
+        <form id="sim-controls" style="background-color: grey; width: 100%;">
+            <legend style="background-color: lightgrey;"><b>Controls:</b></legend>
+            <fieldset style="height: 1.5rem;">
+                <input type="checkbox" id="startBtn" style="margin-left: 1rem;"><label for="startBtn"><b id="start">Lights on</b></label>
+                <input type="checkbox" id="flickerBtn" style="margin-left: 1rem;"><label for="flickerBtn"><b id="flicker">Basic Flicker</b></label>
+                <input value=5 type="range" min="1" max="100" id="range" style="margin-left: 1rem;"/>        
+                <output id="rangevalue" class="rangevalue">5px</output>
+            </fieldset>
+        </form>
+    </body>
+    <script>
+        /*
+            *** Lights. Camera. Flashin'! ***
+        */
+        (function(window) {
+            // holds all our lights
+            var lights2 = []; 
+            var flicker = true;
+            var flickerStyle = "basic";
+            var min_radius = 5;
+
+            $('#range').on('change', function() {
+                min_radius = this.value;
+                $('#rangevalue').text(this.value + "px");
+                init2();
+            });
+
+            // Hold canvas information
+            var canvas;
+            var ctx;
+            var WIDTH;
+            var HEIGHT;
+            var INTERVAL = 400;  // how often, in milliseconds, we check to see if a redraw is needed
+
+            // when set to true, the canvas will redraw everything
+            // invalidate() just sets this to false right now
+            // we want to call invalidate() whenever we make a change
+            var canvasValid = false;
+            var radius;
+
+            const gcd = (...arr) => {
+                const _gcd = (x, y) => (!y ? x : gcd(y, x % y));
+                return [...arr].reduce((a, b) => _gcd(a, b));
+            };
+
+            $('#startBtn').on('click', function (e) {
+                e.preventDefault();
+                $('#start').text(function (_, text) {
+                    return text === 'Lights off' ? 'Lights on' : 'Lights off';
+                });
+                flicker = (flicker == true) ? flicker = false : flicker = true;
+                var clear = (flicker == false) ? clear = true : clear = false;
+                if (clear)
+                    clear(ctx);
+            });
+
+            $('#flickerBtn').on('click', function (e) {
+                e.preventDefault();
+                $('#flicker').text(function (_, text) {
+                    return text === 'Colorful Flicker' ? 'Basic Flicker' : 'Colorful Flicker';
+                });
+                flickerStyle = (flickerStyle === "basic") ? flickerStyle = "color" : flickerStyle = "basic";
+            });
+
+            // Box object to hold data
+            function Box2() {
+                this.x = 0,
+                this.y = 0,
+                this.w = 1, // default width and height?
+                this.h = 1,
+                this.state,
+                this.fill = '#444444'
+            }
+
+            // New methods on the Box class
+            Box2.prototype = {
+                draw: function(context, optionalColor) {
+                    context.fillStyle = this.fill;
+                
+                    // We can skip the drawing of elements that have moved off the screen:
+                    if (this.x > WIDTH || this.y > HEIGHT) return; 
+                    if (this.x + this.w < 0 || this.y + this.h < 0) return;
+                    
+                    var radiusX = this.w / 2; // X radius
+                    // var radiusY = this.h / 2; // Y radius
+                    var startAngle = 0; // Starting point on circle
+                    var endAngle = 2 * Math.PI;
+                    if (this.w <= 5) this.w = 5; // Set a minimum radius so the "planets" don't disappear
+
+                    context.beginPath();
+                    context.ellipse(this.x + radiusX, this.y + radiusX, radiusX, radiusX, 0, startAngle, endAngle);
+                    context.fill();
+                
+                
+                } // end draw
+
+            }
+
+            //Initialize a new Box, add it, and invalidate the canvas
+            function addEllipse(x, y, w, h, fill) {
+                var ellipse = new Box2;
+                ellipse.x = x;
+                ellipse.y = y;
+                ellipse.w = w
+                ellipse.h = h;
+                ellipse.fill = fill;
+                lights2.push(ellipse);
+                invalidate();
+            }
+
+            // initialize our canvas, add a ghost canvas, set draw loop
+            // then add everything we want to intially exist on the canvas
+            function init2() {
+                canvas = document.getElementById('canvas');
+                ctx = canvas.getContext('2d');
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                // console.log("w: " + canvas.width);
+                HEIGHT = canvas.height;
+                WIDTH = canvas.width;
+            
+                //fixes a problem where double clicking causes text to get selected on the canvas
+                canvas.onselectstart = function () { return false; }
+            
+                // make mainDraw() fire every INTERVAL milliseconds
+                radius = gcd(WIDTH, HEIGHT);
+                if (radius < min_radius)
+                    radius = min_radius;
+                lights2 = [];
+                setInterval(mainDraw, INTERVAL);
+                // add custom initialization here:
+            }
+
+            //wipes the canvas context
+            function clear(c) {
+                c.clearRect(0, 0, WIDTH, HEIGHT);
+            }
+
+            // Main draw loop.
+            // While draw is called as often as the INTERVAL variable demands,
+            // It only ever does something if the canvas gets invalidated by our code
+            function mainDraw() {
+                if (canvasValid == false) {
+                    if (flicker)
+                        lights2 = [];
+                    // console.log("flicker: " + flicker);
+                    var diameter = radius * 2;
+                    // console.log("r: " + radius);
+                    for (var x = 0; x <= WIDTH; x += diameter) {
+                        for (var y = 0; y <= HEIGHT; y += diameter)
+                        {
+                            if (flicker) {
+                                var colors = ["rgba(255, 0, 0, 0.8)", "rgba(0, 255, 0, 0.8)", "rgba(0, 0, 255, 0.8)", "rgba(255, 255, 0, 0.8)", "rgba(211, 211, 211, 0.8)"];
+                                if (flickerStyle === "basic")
+                                {
+                                    colors = ["rgba(255, 255, 255, 0.8)", "rgba(255, 255, 0, 0.8)", "rgba(255, 255, 255, 0.8)", "rgba(255, 255, 0, 0.8)", "rgba(211, 211, 211, 0.8)"];
+                                }
+                                var color = colors[(Math.ceil(Math.random() * 5))]
+
+                                addEllipse(x, y, radius, radius, color);
+                            } else {
+                                addEllipse(x, y, radius, radius, 'grey');
+                            }
+                            
+                        }
+                    }
+                    // Add stuff you want drawn in the background all the time here
+                
+                    // draw all lights
+                    var l = lights2.length;
+                    for (var i = 0; i < l; i++) {
+                        lights2[i].draw(ctx); // we used to call drawshape, but now each box draws itself
+                    }
+
+                    // Add stuff you want drawn on top all the time here
+                    // canvasValid = true;
+                }
+            }
+
+            function invalidate() {
+                canvasValid = false;
+            }
+
+            window.init2 = init2;
+        })(window);
+
+        $(document).ready(function(){
+            init2();
+        });
+
+        window.onresize = function() {
+            init2();
+        };
+    
+    </script>
+</html>
